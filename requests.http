@@ -1,0 +1,26 @@
+### Basic product lookup (Dutch market)
+GET http://localhost:8080/api/v1/products/PRD-001?market=nl-NL
+
+### Product with customer-specific pricing (German market, Gold dealer)
+GET http://localhost:8080/api/v1/products/PRD-001?market=de-DE&customerId=CUST-GOLD
+
+### Polish market — localized product names
+GET http://localhost:8080/api/v1/products/PRD-002?market=pl-PL
+
+### Silver customer discount
+GET http://localhost:8080/api/v1/products/PRD-001?market=nl-NL&customerId=CUST-SILVER
+
+### Bronze customer discount
+GET http://localhost:8080/api/v1/products/PRD-002?market=de-DE&customerId=CUST-BRONZE
+
+### Unknown product — expects 404
+GET http://localhost:8080/api/v1/products/UNKNOWN?market=nl-NL
+
+### Invalid market code — expects 400
+GET http://localhost:8080/api/v1/products/PRD-001?market=invalid
+
+### Missing market parameter — expects 400
+GET http://localhost:8080/api/v1/products/PRD-001
+
+### Health check
+GET http://localhost:8080/actuator/health

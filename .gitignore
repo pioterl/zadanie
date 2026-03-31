@@ -1,0 +1,9 @@
+target/
+*.class
+*.jar
+*.log
+.idea/
+*.iml
+.DS_Store
+.mvn/wrapper/maven-wrapper.jar
+kramp-backend-assignment.pdf
