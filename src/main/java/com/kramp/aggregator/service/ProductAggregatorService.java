@@ -3,6 +3,7 @@ package com.kramp.aggregator.service;
 import com.kramp.aggregator.exception.CatalogUnavailableException;
 import com.kramp.aggregator.exception.ProductNotFoundException;
 import com.kramp.aggregator.model.*;
+import com.kramp.aggregator.model.AggregatedProductResponse.DataStatus;
 import com.kramp.aggregator.service.upstream.AvailabilityService;
 import com.kramp.aggregator.service.upstream.CatalogService;
 import com.kramp.aggregator.service.upstream.CustomerService;
@@ -14,7 +15,13 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
 
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 @Service
 public class ProductAggregatorService {
@@ -51,41 +58,42 @@ public class ProductAggregatorService {
     public AggregatedProductResponse getProduct(String productId, String market, String customerId) {
         log.info("Aggregating product info: productId={}, market={}, customerId={}", productId, market, customerId);
 
-        UpstreamFutures futures = dispatchUpstreamCalls(productId, market, customerId);
+        // 1. Dispatch all upstream calls in parallel
+        CompletableFuture<ProductInfo> catalogFuture =
+                supplyAsync(() -> catalogService.getProduct(productId, market));
+        CompletableFuture<PricingInfo> pricingFuture =
+                supplyAsync(() -> pricingService.getPricing(productId, market, customerId));
+        CompletableFuture<AvailabilityInfo> availabilityFuture =
+                supplyAsync(() -> availabilityService.getAvailability(productId, market));
+        CompletableFuture<CustomerInfo> customerFuture = customerId != null
+                ? supplyAsync(() -> customerService.getCustomer(customerId))
+                : CompletableFuture.completedFuture(null);
 
-        ProductInfo product = fetchCatalog(futures.catalog(), productId);
-        PricingInfo pricing = getOptionalResult(futures.pricing(), "PricingService");
-        AvailabilityInfo availability = getOptionalResult(futures.availability(), "AvailabilityService");
-        CustomerInfo customer = getOptionalResult(futures.customer(), "CustomerService");
+        // 2. Collect results — catalog is required, the rest degrade gracefully
+        ProductInfo product       = fetchRequired(catalogFuture, productId);
+        PricingInfo pricing       = fetchOptional(pricingFuture, "PricingService");
+        AvailabilityInfo availability = fetchOptional(availabilityFuture, "AvailabilityService");
+        CustomerInfo customer     = fetchOptional(customerFuture, "CustomerService");
 
-        AggregatedProductResponse.DataStatus dataStatus = buildDataStatus(pricing, availability, customer, customerId);
-
+        // 3. Build response with data status for the frontend
+        DataStatus dataStatus = buildDataStatus(pricing, availability, customer, customerId);
         return new AggregatedProductResponse(product, pricing, availability, customer, market, dataStatus);
     }
 
-    private UpstreamFutures dispatchUpstreamCalls(String productId, String market, String customerId) {
-        CompletableFuture<ProductInfo> catalog = CompletableFuture
-                .supplyAsync(() -> catalogService.getProduct(productId, market), executor);
-        CompletableFuture<PricingInfo> pricing = CompletableFuture
-                .supplyAsync(() -> pricingService.getPricing(productId, market, customerId), executor);
-        CompletableFuture<AvailabilityInfo> availability = CompletableFuture
-                .supplyAsync(() -> availabilityService.getAvailability(productId, market), executor);
-        CompletableFuture<CustomerInfo> customer = (customerId != null)
-                ? CompletableFuture.supplyAsync(() -> customerService.getCustomer(customerId), executor)
-                : CompletableFuture.completedFuture(null);
+    // --- Upstream call helpers ---
 
-        return new UpstreamFutures(catalog, pricing, availability, customer);
+    private <T> CompletableFuture<T> supplyAsync(Supplier<T> supplier) {
+        return CompletableFuture.supplyAsync(supplier, executor);
     }
 
-    private ProductInfo fetchCatalog(CompletableFuture<ProductInfo> future, String productId) {
+    private ProductInfo fetchRequired(CompletableFuture<ProductInfo> future, String productId) {
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof IllegalArgumentException) {
-                throw new ProductNotFoundException("Product not found: " + productId, cause);
+            if (e.getCause() instanceof IllegalArgumentException) {
+                throw new ProductNotFoundException("Product not found: " + productId, e.getCause());
             }
-            throw new CatalogUnavailableException("Catalog service failed for product: " + productId, cause);
+            throw new CatalogUnavailableException("Catalog service failed for product: " + productId, e.getCause());
         } catch (TimeoutException e) {
             future.cancel(true);
             throw new CatalogUnavailableException("Catalog service timed out for product: " + productId, e);
@@ -95,7 +103,7 @@ public class ProductAggregatorService {
         }
     }
 
-    private <T> T getOptionalResult(CompletableFuture<T> future, String serviceName) {
+    private <T> T fetchOptional(CompletableFuture<T> future, String serviceName) {
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -112,23 +120,26 @@ public class ProductAggregatorService {
         }
     }
 
-    private AggregatedProductResponse.DataStatus buildDataStatus(
-            PricingInfo pricing, AvailabilityInfo availability, CustomerInfo customer, String customerId
+    // --- Response building ---
+
+    private DataStatus buildDataStatus(
+            PricingInfo pricing,
+            AvailabilityInfo availability,
+            CustomerInfo customer,
+            String customerId
     ) {
-        return new AggregatedProductResponse.DataStatus(
-                pricing != null,
-                availability != null,
-                customer != null || customerId == null,
-                pricing == null ? "Pricing information is temporarily unavailable" : null,
-                availability == null ? "Stock information is temporarily unavailable" : null,
-                customer == null && customerId != null ? "Customer personalization is temporarily unavailable" : null
+        boolean customerRequested = customerId != null;
+
+        return new DataStatus(
+                /* pricingAvailable */      pricing != null,
+                /* availabilityAvailable */  availability != null,
+                /* customerAvailable */      customer != null || !customerRequested,
+                /* pricingError */           pricing == null
+                        ? "Pricing information is temporarily unavailable" : null,
+                /* availabilityError */      availability == null
+                        ? "Stock information is temporarily unavailable" : null,
+                /* customerError */          customer == null && customerRequested
+                        ? "Customer personalization is temporarily unavailable" : null
         );
     }
-
-    private record UpstreamFutures(
-            CompletableFuture<ProductInfo> catalog,
-            CompletableFuture<PricingInfo> pricing,
-            CompletableFuture<AvailabilityInfo> availability,
-            CompletableFuture<CustomerInfo> customer
-    ) {}
 }
