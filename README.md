@@ -21,6 +21,13 @@ A backend service that aggregates product information from multiple upstream ser
 
 The service starts on `http://localhost:8080`.
 
+### API Documentation
+
+Once the service is running, interactive Swagger UI is available at:
+
+- **Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- **OpenAPI JSON**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+
 ### Example Requests
 
 ```bash
@@ -97,7 +104,6 @@ A configurable timeout (`aggregator.timeout-ms`, default 500ms) applies to each 
 - **Per-service timeouts and circuit breakers** (e.g., Resilience4j) — if Availability starts failing consistently, stop calling it for a cooldown period instead of waiting for each timeout.
 - **Caching layer** — product catalog data changes infrequently; a short TTL cache (e.g., Caffeine) would reduce upstream load and improve P99 latency.
 - **Observability** — Micrometer metrics for per-service latency, failure rates, and cache hit ratios. Structured logging with correlation IDs for request tracing.
-- **API documentation** — OpenAPI/Swagger spec for the REST endpoint.
 - **Contract tests** — define expected upstream API contracts so changes in upstream services are caught early.
 
 ## Design Question: Option A — Adding a Related Products Service
