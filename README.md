@@ -50,11 +50,13 @@ curl "http://localhost:8080/actuator/health"
 
 ### Available Test Data
 
-| Products  | Customers    | Markets          |
-|-----------|-------------|------------------|
-| `PRD-001` | `CUST-GOLD`   | `nl-NL`, `de-DE` |
-| `PRD-002` | `CUST-SILVER`  | `pl-PL`, `fr-FR` |
-|           | `CUST-BRONZE`  |                  |
+| Products  | Customers      | Markets (localized)        |
+|-----------|----------------|----------------------------|
+| `PRD-001` | `CUST-GOLD`    | `nl-NL`, `de-DE`, `pl-PL`  |
+| `PRD-002` | `CUST-SILVER`  |                            |
+|           | `CUST-BRONZE`  |                            |
+
+Other market codes (e.g., `fr-FR`) are accepted and return correct pricing/availability, but product names fall back to English.
 
 ## Key Design Decisions
 
