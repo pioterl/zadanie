@@ -28,6 +28,10 @@ Once the service is running, interactive Swagger UI is available at:
 - **Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 - **OpenAPI JSON**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
+### IntelliJ HTTP Client
+
+The file `requests.http` contains ready-to-use requests for all endpoints (happy paths and error cases). Open it in IntelliJ and click the green play button next to each request.
+
 ### Example Requests
 
 ```bash
