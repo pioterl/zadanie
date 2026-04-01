@@ -59,21 +59,20 @@ public class ProductAggregatorService {
         log.info("Aggregating product info: productId={}, market={}, customerId={}", productId, market, customerId);
 
         // 1. Dispatch all upstream calls in parallel
-        CompletableFuture<ProductInfo> catalogFuture =
-                supplyAsync(() -> catalogService.getProduct(productId, market));
-        CompletableFuture<PricingInfo> pricingFuture =
-                supplyAsync(() -> pricingService.getPricing(productId, market, customerId));
-        CompletableFuture<AvailabilityInfo> availabilityFuture =
-                supplyAsync(() -> availabilityService.getAvailability(productId, market));
-        CompletableFuture<CustomerInfo> customerFuture = customerId != null
-                ? supplyAsync(() -> customerService.getCustomer(customerId))
-                : CompletableFuture.completedFuture(null);
+        CompletableFuture<ProductInfo> catalogFuture = supplyAsync(
+                () -> catalogService.getProduct(productId, market));
+        CompletableFuture<PricingInfo> pricingFuture = supplyAsync(
+                () -> pricingService.getPricing(productId, market, customerId));
+        CompletableFuture<AvailabilityInfo> availabilityFuture = supplyAsync(
+                () -> availabilityService.getAvailability(productId, market));
+        CompletableFuture<CustomerInfo> customerFuture = customerId != null ? supplyAsync(
+                () -> customerService.getCustomer(customerId)) : CompletableFuture.completedFuture(null);
 
         // 2. Collect results — catalog is required, the rest degrade gracefully
-        ProductInfo product       = fetchRequired(catalogFuture, productId);
-        PricingInfo pricing       = fetchOptional(pricingFuture, "PricingService");
+        ProductInfo product = fetchRequired(catalogFuture, productId);
+        PricingInfo pricing = fetchOptional(pricingFuture, "PricingService");
         AvailabilityInfo availability = fetchOptional(availabilityFuture, "AvailabilityService");
-        CustomerInfo customer     = fetchOptional(customerFuture, "CustomerService");
+        CustomerInfo customer = fetchOptional(customerFuture, "CustomerService");
 
         // 3. Build response with data status for the frontend
         DataStatus dataStatus = buildDataStatus(pricing, availability, customer, customerId);
@@ -122,24 +121,15 @@ public class ProductAggregatorService {
 
     // --- Response building ---
 
-    private DataStatus buildDataStatus(
-            PricingInfo pricing,
-            AvailabilityInfo availability,
-            CustomerInfo customer,
-            String customerId
-    ) {
+    private DataStatus buildDataStatus(PricingInfo pricing, AvailabilityInfo availability, CustomerInfo customer, String customerId) {
         boolean customerRequested = customerId != null;
 
         return new DataStatus(
-                /* pricingAvailable */      pricing != null,
+                /* pricingAvailable */       pricing != null,
                 /* availabilityAvailable */  availability != null,
                 /* customerAvailable */      customer != null || !customerRequested,
-                /* pricingError */           pricing == null
-                        ? "Pricing information is temporarily unavailable" : null,
-                /* availabilityError */      availability == null
-                        ? "Stock information is temporarily unavailable" : null,
-                /* customerError */          customer == null && customerRequested
-                        ? "Customer personalization is temporarily unavailable" : null
-        );
+                /* pricingError */           pricing == null ? "Pricing information is temporarily unavailable" : null,
+                /* availabilityError */      availability == null ? "Stock information is temporarily unavailable" : null,
+                /* customerError */          customer == null && customerRequested ? "Customer personalization is temporarily unavailable" : null);
     }
 }
