@@ -30,9 +30,7 @@ public class OpenApiConfig {
                     .addProperty("status", new Schema<>().type("integer").example(404))
                     .addProperty("timestamp", new Schema<>().type("string").example("2025-01-15T10:30:00Z"));
 
-            openApi.getComponents().setSchemas(
-                    Map.of("ErrorResponse", errorSchema)
-            );
+            openApi.getComponents().addSchemas("ErrorResponse", errorSchema);
         };
     }
 }
